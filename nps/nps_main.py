@@ -202,6 +202,15 @@ class nps_main:
                 raise ValueError('ehang-io/nps 的连接协议只能为 tcp 或 kcp')
             if int(config['web_port']) == int(config['bridge_port']):
                 raise ValueError('Web 管理端口不能与连接端口相同，避免端口复用绕过 Web 监听地址限制')
+            enabled = {'bridge_port': int(config['bridge_port']), 'web_port': int(config['web_port'])}
+            for name in ('http_proxy_port', 'https_proxy_port'):
+                if int(config.get(name, '0')):
+                    enabled[name] = int(config[name])
+            used = {}
+            for name, port in enabled.items():
+                if port in used:
+                    raise ValueError('{} 与 {} 不能使用相同端口 {}'.format(used[port], name, port))
+                used[port] = name
             for name in ('bridge_ip', 'web_ip'):
                 try:
                     ipaddress.ip_address(config.get(name, ''))
@@ -536,7 +545,7 @@ class nps_main:
     def _initial_config(self, role, template):
         if role == 'npc':
             return '# 先在 NPS 管理后台添加客户端，再填写地址和该客户端的 vkey。\n[common]\nserver_addr=\nvkey=\nconn_type=tcp\nauto_reconnection=true\ncrypt=true\ncompress=true\n'
-        changes = {'http_proxy_port': '0', 'https_proxy_port': '0', 'p2p_port': ''}
+        changes = {'http_proxy_port': '18080', 'https_proxy_port': '18443', 'p2p_port': '18000'}
         changes.update({'bridge_type': 'tcp', 'bridge_port': '8024', 'bridge_ip': '0.0.0.0',
                         'runmode': 'pro', 'web_ip': '127.0.0.1', 'web_port': '18081', 'web_host': '',
                         'web_username': 'admin', 'web_password': secrets.token_urlsafe(24),

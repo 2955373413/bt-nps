@@ -3,7 +3,7 @@
     "name": "nps",
     "type": "免费应用",
     "ps": "使用本地或在线安装包管理 nps 服务端与 npc 客户端，适配 ehang-io/nps v0.26.10，支持配置、启停和日志查看",
-    "versions": "1.3",
+    "versions": "1.4",
     "checks": ["/www/server/panel/plugin/nps"],
     "author": "社区适配",
     "home": "https://github.com/ehang-io/nps",

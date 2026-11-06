@@ -119,6 +119,8 @@ assert(source.includes('备份并重装（在线）'));
 assert.deepStrictEqual(Array.from(plugin.clientFields.find(field => field[0] === 'conn_type')[4]), ['tcp', 'kcp']);
 assert.deepStrictEqual(Array.from(plugin.serverFields.find(field => field[0] === 'bridge_type')[4]), ['tcp', 'kcp']);
 assert.deepStrictEqual(Array.from(plugin.serverFields.find(field => field[0] === 'log_level')[4]), ['0', '1', '2', '3', '4', '5', '6', '7']);
-assert(plugin.serverFields.find(field => field[0] === 'p2p_port')[3].includes('留空关闭'));
+assert(plugin.serverFields.find(field => field[0] === 'p2p_port')[3].includes('18000'));
+assert(plugin.serverFields.find(field => field[0] === 'http_proxy_port')[3].includes('18080'));
+assert(plugin.serverFields.find(field => field[0] === 'https_proxy_port')[3].includes('18443'));
 
 console.log('前端脚本语法、HTML 转义、本地/在线安装、保存重启和 TCP/UDP 防火墙参数测试通过');

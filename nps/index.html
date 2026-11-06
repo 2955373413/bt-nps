@@ -41,9 +41,9 @@
       ['bridge_ip', '连接监听 IP', 'text', '0.0.0.0 表示监听全部 IPv4 地址'],
       ['bridge_type', '连接协议', 'select', '服务端与客户端必须一致；tcp 使用 TCP，kcp 使用 UDP', ['tcp', 'kcp']],
       ['bridge_port', '连接端口', 'number', '默认 8024；必须为 1–65535，不能填 0'],
-      ['http_proxy_port', 'HTTP 代理端口', 'number', '默认关闭，避免占用宝塔网站的 80 端口'],
-      ['https_proxy_port', 'HTTPS 代理端口', 'number', '默认关闭，避免占用宝塔网站的 443 端口'],
-      ['p2p_port', 'P2P 起始端口', 'number', '留空关闭，不能填 0；启用时连续使用 3 个 UDP 端口'],
+      ['http_proxy_port', 'HTTP 代理端口', 'number', '默认 18080，避开宝塔网站的 80；填 0 关闭'],
+      ['https_proxy_port', 'HTTPS 代理端口', 'number', '默认 18443，避开宝塔网站的 443；填 0 关闭'],
+      ['p2p_port', 'P2P 起始端口', 'number', '默认 18000，占用 18000–18002 三个 UDP 端口；留空才关闭，不能填 0'],
       ['web_ip', 'Web 监听 IP', 'text', '默认 127.0.0.1；推荐使用宝塔网站配置 HTTPS 反向代理'],
       ['web_port', 'Web 管理端口', 'number', '默认 18081，不会自动开放公网访问'],
       ['web_username', 'Web 用户名', 'text', '用于登录 NPS 自带的管理后台'],
@@ -172,7 +172,7 @@
         if (!res.status) return that.message(res);
         var fields = role === 'nps' ? that.serverFields : that.clientFields;
         var form = $('<div>').appendTo(that.body);
-        $('<p class="nps-tip">').text(role === 'nps' ? 'HTTP/HTTPS 代理端口可填 0 关闭；P2P 必须留空才会关闭。连接端口与 Web 端口须大于 0 且不同。保存后需要重启，请确认云安全组。' : '填写已创建客户端的 vkey。隧道可由 NPS 后台管理，也可在“配置文件”页添加；连接多个服务端请使用独立实例。').appendTo(form);
+        $('<p class="nps-tip">').text(role === 'nps' ? '默认端口：连接 8024/TCP、HTTP 18080、HTTPS 18443、P2P 18000–18002/UDP、Web 18081。端口填 0（P2P 留空）表示关闭；各监听端口不能重复。保存后需要重启。' : '填写已创建客户端的 vkey。隧道可由 NPS 后台管理，也可在“配置文件”页添加；连接多个服务端请使用独立实例。').appendTo(form);
         $.each(fields, function (_, field) {
           var key = field[0], row = $('<div class="nps-field">').appendTo(form);
           $('<label>').text(field[1]).appendTo(row);

@@ -138,11 +138,12 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(config['bridge_port'], '8024')
         self.assertEqual(config['bridge_type'], 'tcp')
         self.assertEqual(config['log_level'], '6')
-        self.assertEqual(config['p2p_port'], '')
         self.assertEqual(config['runmode'], 'pro')
         self.assertEqual(config['web_ip'], '127.0.0.1')
         self.assertEqual(config['web_port'], '18081')
-        self.assertEqual(config['http_proxy_port'], '0')
+        self.assertEqual(config['http_proxy_port'], '18080')
+        self.assertEqual(config['https_proxy_port'], '18443')
+        self.assertEqual(config['p2p_port'], '18000')
         self.assertEqual(config['public_vkey'], '')
         self.assertGreaterEqual(len(config['web_password']), 24)
         other = self.plugin._initial_config('nps', '')
@@ -185,6 +186,18 @@ class PluginTests(unittest.TestCase):
                 result = self.plugin.set_config({'role': 'nps', 'revision': self.plugin._revision(text), 'config': json.dumps(data)})
                 self.assertFalse(result['status'], result)
                 self.assertEqual(self.plugin._read(self.plugin._config_path('nps')), text)
+
+    def test_proxy_ports_must_be_distinct(self):
+        text = self.provision()
+        for changes in ({'http_proxy_port': '18081'}, {'https_proxy_port': '18080'},
+                        {'http_proxy_port': '8024'}, {'https_proxy_port': '18080'}):
+            with self.subTest(changes=changes):
+                result = self.plugin.set_config({'role': 'nps', 'revision': self.plugin._revision(text),
+                                                 'config': json.dumps(changes)})
+                self.assertFalse(result['status'], result)
+                self.assertEqual(self.plugin._read(self.plugin._config_path('nps')), text)
+        disabled = self.plugin._patch_config('nps', text, {'http_proxy_port': '0', 'https_proxy_port': '0'})
+        self.assertEqual(self.plugin._validate('nps', disabled)['http_proxy_port'], '0')
 
     def test_numeric_log_levels_and_p2p_blank(self):
         text = self.provision()

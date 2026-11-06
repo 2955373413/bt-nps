@@ -64,12 +64,17 @@ README.md
 | --- | --- | --- |
 | `bridge_type` | `tcp` | 仅支持 `tcp` / `kcp`，客户端需一致 |
 | `bridge_port` | `8024` | 客户端连接端口，必须 1–65535 |
-| `http_proxy_port` / `https_proxy_port` | `0` | 默认关闭，避免占用宝塔网站的 80/443 |
-| `p2p_port` | 空 | **留空才关闭**，启动时占用连续 3 个 UDP 端口，不能填 0 |
+| `http_proxy_port` | `18080` | HTTP 域名代理，避开宝塔的 80；填 `0` 关闭 |
+| `https_proxy_port` | `18443` | HTTPS 域名代理，避开宝塔的 443；填 `0` 关闭 |
+| `p2p_port` | `18000` | 占用 `18000–18002` 三个 UDP 端口；**留空才关闭**，不能填 0 |
 | `web_ip` / `web_port` | `127.0.0.1` / `18081` | 默认仅本机访问，Web 端口不能与连接端口相同 |
 | `web_username` / `web_password` | `admin` / 随机生成 | 密码可在插件「服务配置」中查看 |
 | `log_level` | `6` | 0 紧急 … 7 调试 |
 | `log_path` | `/usr/local/bt-nps/logs/nps.log` | 插件依赖该路径读取日志，不建议修改 |
+
+所有监听端口（`bridge_port`、`http_proxy_port`、`https_proxy_port`、`web_port`）不能重复，修改后需重启生效。
+
+域名代理默认使用包内自签证书 `conf/server.pem`。启用后还需在 NPS 后台添加“域名转发”并把域名解析到服务器；如需正规证书，替换这两个文件或在宝塔反向代理处终止 TLS。P2P 启用后需在防火墙和云安全组放行连续 3 个 UDP 端口。
 
 Web 管理后台默认只监听本机。推荐在宝塔网站中添加 HTTPS 反向代理到 `http://127.0.0.1:18081`，再用域名访问；如确需公网直连，请同时修改监听地址、放行防火墙并限制来源 IP。
 
