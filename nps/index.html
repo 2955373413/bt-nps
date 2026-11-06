@@ -1,0 +1,289 @@
+<style>
+  #bt-nps-plugin { width: 800px; height: 610px; }
+  #bt-nps-plugin .bt-w-con { height: 610px; overflow: auto; }
+  #bt-nps-plugin .nps-body { height: 510px; overflow: auto; }
+  #bt-nps-plugin .nps-tip { color: #777; line-height: 24px; margin: 12px 0; }
+  #bt-nps-plugin .nps-warning { color: #b76a00; }
+  #bt-nps-plugin .nps-actions button { margin: 0 8px 8px 0; }
+  #bt-nps-plugin .nps-field { margin-bottom: 14px; }
+  #bt-nps-plugin .nps-field > label { width: 145px; text-align: right; margin-right: 14px; vertical-align: top; line-height: 32px; }
+  #bt-nps-plugin .nps-input { display: inline-block; width: 400px; }
+  #bt-nps-plugin .nps-input input, #bt-nps-plugin .nps-input select { width: 245px; height: 32px; }
+  #bt-nps-plugin .nps-input small { display: block; color: #888; margin-top: 4px; }
+  #bt-nps-plugin .nps-input a { margin-left: 10px; }
+  #bt-nps-plugin .nps-log { height: 400px; overflow: auto; white-space: pre-wrap; word-break: break-all; background: #242424; color: #ddd; padding: 12px; }
+  #bt-nps-plugin .nps-path { word-break: break-all; }
+</style>
+<div id="bt-nps-plugin" class="bt-w-main">
+  <div class="bt-w-menu">
+    <p data-role="nps" class="bgw">nps 服务端</p>
+    <p data-role="npc">npc 客户端</p>
+  </div>
+  <div class="bt-w-con pd15">
+    <div class="tab-nav ml0 mb15">
+      <span data-page="status" class="on">服务状态</span>
+      <span data-page="config">服务配置</span>
+      <span data-page="file">配置文件</span>
+      <span data-page="logs">日志</span>
+    </div>
+    <div class="nps-body"></div>
+  </div>
+</div>
+<script type="text/javascript">
+(function () {
+  var nps = {
+    role: 'nps',
+    view: 0,
+    editor: null,
+    installed: {},
+    root: $('#bt-nps-plugin'),
+    serverFields: [
+      ['bridge_ip', '连接监听 IP', 'text', '0.0.0.0 表示监听全部 IPv4 地址'],
+      ['bridge_type', '连接协议', 'select', '服务端与客户端必须一致；tcp 使用 TCP，kcp 使用 UDP', ['tcp', 'kcp']],
+      ['bridge_port', '连接端口', 'number', '默认 8024；必须为 1–65535，不能填 0'],
+      ['http_proxy_port', 'HTTP 代理端口', 'number', '默认关闭，避免占用宝塔网站的 80 端口'],
+      ['https_proxy_port', 'HTTPS 代理端口', 'number', '默认关闭，避免占用宝塔网站的 443 端口'],
+      ['p2p_port', 'P2P 起始端口', 'number', '留空关闭，不能填 0；启用时连续使用 3 个 UDP 端口'],
+      ['web_ip', 'Web 监听 IP', 'text', '默认 127.0.0.1；推荐使用宝塔网站配置 HTTPS 反向代理'],
+      ['web_port', 'Web 管理端口', 'number', '默认 18081，不会自动开放公网访问'],
+      ['web_username', 'Web 用户名', 'text', '用于登录 NPS 自带的管理后台'],
+      ['web_password', 'Web 密码', 'password', '安装时随机生成，至少 12 位；请妥善保管'],
+      ['public_vkey', '公共 vkey', 'password', '默认留空禁用；普通客户端请使用后台单独创建的 vkey'],
+      ['log_level', '日志级别', 'select', '0 紧急、1 警报、2 严重、3 错误、4 警告、5 通知、6 信息、7 调试', ['0', '1', '2', '3', '4', '5', '6', '7']]
+    ],
+    clientFields: [
+      ['server_addr', '服务器地址', 'text', '格式：域名:端口、IPv4:端口 或 [IPv6]:端口'],
+      ['vkey', '客户端 vkey', 'password', '从 NPS 管理后台的客户端列表获取，不是 Web 登录密码'],
+      ['conn_type', '连接协议', 'select', '协议和端口必须与服务端的 bridge_type、bridge_port 一致', ['tcp', 'kcp']],
+      ['auto_reconnection', '自动重连', 'select', '', ['true', 'false']]
+    ],
+    escape: function (value) {
+      return $('<div>').text(value == null ? '' : String(value)).html();
+    },
+    message: function (res) {
+      bt_tools.msg({status: !!res.status, msg: this.escape(res.msg || '请求失败')});
+    },
+    request: function (method, data, callback, loading) {
+      bt_tools.send({url: '/plugin?action=a&name=nps&s=' + method, data: data}, function (res) {
+        if (!res || typeof res !== 'object') res = {status: false, msg: '接口返回异常，请检查面板错误日志'};
+        callback(res);
+      }, {verify: false, load: loading || '正在处理'});
+    },
+    init: function () {
+      var that = this;
+      this.root.find('.bt-w-menu p').on('click', function () {
+        that.role = $(this).attr('data-role');
+        $(this).addClass('bgw').siblings().removeClass('bgw');
+        that.show('status');
+      });
+      this.root.find('.tab-nav span').on('click', function () {
+        var page = $(this).attr('data-page');
+        if (page !== 'status' && that.installed[that.role] === false) {
+          return that.message({status: false, msg: '请先安装服务'});
+        }
+        that.show(page);
+      });
+      this.root.closest('.layui-layer-page').css('width', '800px');
+      this.show('status');
+    },
+    show: function (page) {
+      this.view++;
+      if (this.editor && this.editor.ACE) this.editor.ACE.destroy();
+      this.editor = null;
+      this.root.find('.tab-nav span').removeClass('on').filter('[data-page="' + page + '"]').addClass('on');
+      this.body = this.root.find('.nps-body').empty();
+      var role = this.role, view = this.view;
+      if (page === 'status') this.status(role, view);
+      if (page === 'config') this.config(role, view);
+      if (page === 'file') this.file(role, view);
+      if (page === 'logs') this.logs(role, view);
+    },
+    status: function (role, view) {
+      var that = this;
+      this.request('get_info', {role: role}, function (res) {
+        if (view !== that.view) return;
+        if (!res.status) return that.message(res);
+        var data = res.data;
+        var canLocal = data.package_available && !data.environment_error;
+        var canOnline = data.online_available && !data.environment_error;
+        that.installed[role] = data.installed;
+        var box = $('<div>').appendTo(that.body);
+        $('<p>').text('上游：' + data.repository + '　目标版本：' + data.target_version).appendTo(box);
+        $('<p class="mt15">').text('安装版本：' + (data.version || '未安装')).appendTo(box);
+        $('<p class="mt15">').text('服务状态：' + (data.running ? '运行中' : '未运行') + '（' + data.state + '）').appendTo(box);
+        var actions = $('<div class="nps-actions mt20">').appendTo(box);
+        if (!data.installed) {
+          $('<button class="btn btn-success btn-sm">本地安装</button>').prop('disabled', !canLocal).appendTo(actions).on('click', function () { that.install(role, false, 'local'); });
+          $('<button class="btn btn-default btn-sm">在线安装</button>').prop('disabled', !canOnline).appendTo(actions).on('click', function () { that.install(role, false, 'online'); });
+        } else {
+          $.each([['start', '启动'], ['stop', '停止'], ['restart', '重启']], function (_, item) {
+            if ((data.running && item[0] === 'start') || (!data.running && item[0] === 'stop')) return;
+            $('<button class="btn btn-default btn-sm">').text(item[1]).prop('disabled', item[0] !== 'stop' && !!data.environment_error).appendTo(actions).on('click', function () { that.service(role, item[0]); });
+          });
+          $('<button class="btn btn-default btn-sm">备份并重装（本地）</button>').prop('disabled', !canLocal).appendTo(actions).on('click', function () { that.install(role, true, 'local'); });
+          $('<button class="btn btn-default btn-sm">备份并重装（在线）</button>').prop('disabled', !canOnline).appendTo(actions).on('click', function () { that.install(role, true, 'online'); });
+        }
+        $('<button class="btn btn-default btn-sm">刷新</button>').appendTo(actions).on('click', function () { that.show('status'); });
+        if (data.dashboard && /^https?:\/\//.test(data.dashboard)) {
+          $('<p class="mt15">').append($('<a class="btlink" target="_blank" rel="noopener noreferrer">').attr('href', data.dashboard).text('打开 NPS 管理后台')).appendTo(box);
+        }
+        if (data.local_dashboard) {
+          $('<p class="nps-tip">').text('本机管理地址：' + data.local_dashboard + '。请在宝塔网站中添加 HTTPS 反向代理到此地址；它不是当前电脑的访问地址。').appendTo(box);
+        }
+        if (data.config_error) $('<p class="nps-warning">').text(data.config_error).appendTo(box);
+        if (data.environment_error) $('<p class="nps-warning">').text(data.environment_error).appendTo(box);
+        $('<p class="nps-tip nps-path">').text('配置：' + data.config_path + '\n日志：' + data.log_path).css('white-space', 'pre-wrap').appendTo(box);
+        $('<p class="nps-tip nps-path">').text('本地安装包：' + (data.package_path || '当前架构不受支持')).appendTo(box);
+        if (data.package_error) $('<p class="nps-warning nps-path">').text(data.package_error).appendTo(box);
+        $('<p class="nps-tip nps-path">').text('在线安装地址：' + (data.online_url || '未固定')).appendTo(box);
+        if (data.online_error) $('<p class="nps-warning nps-path">').text(data.online_error).appendTo(box);
+        $('<p class="nps-tip">').text('本地安装不联网；在线安装从 GitHub 官方 Release 下载，两种方式都用 packages.json 中固定的 SHA256 校验后方可解压。支持 Linux amd64 / arm64，要求 systemd。').appendTo(box);
+        $('<p class="nps-tip">').text('本插件管理进程和配置；客户端、TCP/UDP 隧道、域名转发请在 NPS 自带的 Web 后台管理。npc 的“运行中”不等于已成功连接服务器。').appendTo(box);
+        $('<p class="nps-tip nps-warning">').text('仅支持 ehang-io/nps v0.26.10，连接协议为 TCP/KCP。Web 后台建议仅通过带访问控制的 HTTPS 反向代理访问。').appendTo(box);
+        $('<a class="btlink" target="_blank" rel="noopener noreferrer">').attr('href', data.release_url).text('上游发布页（可选查看，不参与安装）').appendTo(box);
+      }, '获取服务状态');
+    },
+    install: function (role, reinstall, source) {
+      var that = this, online = source === 'online';
+      var from = online ? 'GitHub 官方在线包' : '本地安装包';
+      bt.simple_confirm({title: (reinstall ? '重装 ' : '安装 ') + role,
+        msg: reinstall ? '将使用' + from + '校验后停止服务，备份并保留配置及隧道数据、替换程序。完成后需要手动启动，是否继续？'
+          : (online ? '将从 GitHub 官方 Release 下载安装包并校验 SHA256，再创建独立的 systemd 服务，不会自动放行端口。服务器需能访问 GitHub。完成后请先配置再启动，是否继续？'
+            : '将从插件目录读取本地安装包并校验 SHA256，创建独立的 systemd 服务，不联网、不自动放行端口。完成后请先配置再启动，是否继续？')}, function () {
+        that.request(reinstall ? 'reinstall' : 'install', {role: role, source: online ? 'online' : 'local'}, function (res) {
+          that.message(res);
+          if (that.role === role) that.show('status');
+        }, online ? '正在下载并校验在线包，请勿重复操作' : '正在校验本地包并安装，请勿重复操作');
+      });
+    },
+    service: function (role, action) {
+      var that = this;
+      bt.simple_confirm({title: '管理 ' + role, msg: '确定执行 ' + action + '？停止或重启会中断当前连接。'}, function () {
+        that.request('service_admin', {role: role, status: action}, function (res) {
+          that.message(res);
+          if (that.role === role) that.show('status');
+        }, '正在操作服务');
+      });
+    },
+    config: function (role, view) {
+      var that = this;
+      this.request('get_config', {role: role}, function (res) {
+        if (view !== that.view) return;
+        if (!res.status) return that.message(res);
+        var fields = role === 'nps' ? that.serverFields : that.clientFields;
+        var form = $('<div>').appendTo(that.body);
+        $('<p class="nps-tip">').text(role === 'nps' ? 'HTTP/HTTPS 代理端口可填 0 关闭；P2P 必须留空才会关闭。连接端口与 Web 端口须大于 0 且不同。保存后需要重启，请确认云安全组。' : '填写已创建客户端的 vkey。隧道可由 NPS 后台管理，也可在“配置文件”页添加；连接多个服务端请使用独立实例。').appendTo(form);
+        $.each(fields, function (_, field) {
+          var key = field[0], row = $('<div class="nps-field">').appendTo(form);
+          $('<label>').text(field[1]).appendTo(row);
+          var group = $('<div class="nps-input">').appendTo(row), input;
+          if (field[2] === 'select') {
+            input = $('<select class="bt-input-text">');
+            $.each(field[4], function (_, value) { $('<option>').val(value).text(value).appendTo(input); });
+          } else {
+            input = $('<input class="bt-input-text" autocomplete="off">').attr('type', field[2]);
+            if (field[2] === 'number') input.attr({min: ['bridge_port', 'web_port', 'p2p_port'].indexOf(key) >= 0 ? 1 : 0, max: key === 'p2p_port' ? 65533 : 65535, step: 1});
+          }
+          input.attr('name', key).val(res.data[key] == null ? '' : res.data[key]).appendTo(group);
+          if (field[2] === 'password') {
+            $('<a href="javascript:;" class="btlink">显示</a>').appendTo(group).on('click', function () {
+              var show = input.attr('type') === 'password';
+              input.attr('type', show ? 'text' : 'password');
+              $(this).text(show ? '隐藏' : '显示');
+            });
+          }
+          if (role === 'nps' && field[2] === 'number') {
+            $('<a href="javascript:;" class="btlink">放行端口</a>').appendTo(group).on('click', function () { that.firewall(key, input.val(), form); });
+          }
+          if (field[3]) $('<small>').text(field[3]).appendTo(group);
+        });
+        var collect = function () {
+          var data = {};
+          $.each(fields, function (_, field) { data[field[0]] = String(form.find('[name="' + field[0] + '"]').val() || ''); });
+          return {role: role, revision: res.revision, config: JSON.stringify(data)};
+        };
+        that.saveButtons(form, function (restart) { that.save('set_config', collect(), restart, view, 'config'); });
+      }, '获取服务配置');
+    },
+    firewall: function (key, value, form) {
+      var that = this, port = Number(value);
+      if (['bridge_port', 'http_proxy_port', 'https_proxy_port', 'web_port', 'p2p_port'].indexOf(key) < 0) {
+        return this.message({status: false, msg: '不支持的端口字段'});
+      }
+      var bridgeType = form.find('[name="bridge_type"]').val();
+      if (key === 'bridge_port' && ['tcp', 'kcp'].indexOf(bridgeType) < 0) {
+        return this.message({status: false, msg: '请先选择 tcp 或 kcp 连接协议'});
+      }
+      if (!/^\d+$/.test(value) || port < 1 || port > (key === 'p2p_port' ? 65533 : 65535)) {
+        return this.message({status: false, msg: '请先填写有效且非 0 的端口'});
+      }
+      if (key === 'web_port' && /^(127\.|::1$)/.test(form.find('[name="web_ip"]').val())) {
+        return this.message({status: false, msg: 'Web 当前只监听本机，无需放行。推荐通过宝塔网站的 HTTPS 反向代理访问。'});
+      }
+      var protocol = key === 'p2p_port' || (key === 'bridge_port' && bridgeType === 'kcp') ? 'udp' : 'tcp';
+      var ports = key === 'p2p_port' ? port + '-' + (port + 2) : String(port);
+      bt.simple_confirm({title: '放行 ' + protocol.toUpperCase() + ' 端口', msg: '将向所有来源开放 ' + protocol.toUpperCase() + ' ' + ports + '。请确认确需公网访问，并检查云安全组。此操作不会保存当前配置，是否继续？'}, function () {
+        bt_tools.send({url: '/safe/firewall/create_rules', data: {data: JSON.stringify({protocol: protocol, ports: ports, choose: 'all', address: '', domain: '', types: 'accept', brief: 'NPS管理器 ' + key, source: ''})}}, function (res) {
+          that.message(res);
+        }, {load: '正在添加防火墙规则', verify: false});
+      });
+    },
+    saveButtons: function (target, save) {
+      var actions = $('<div class="nps-actions mt15">').appendTo(target);
+      $('<button class="btn btn-success btn-sm">保存</button>').appendTo(actions).on('click', function () { save(false); });
+      $('<button class="btn btn-default btn-sm">保存并重启</button>').appendTo(actions).on('click', function () { save(true); });
+    },
+    save: function (method, payload, restart, view, page) {
+      var that = this;
+      var execute = function () {
+        if (view !== that.view) return;
+        that.body.find('button').prop('disabled', true);
+        that.request(method, payload, function (res) {
+          if (view === that.view) that.body.find('button').prop('disabled', false);
+          if (!res.status) return that.message(res);
+          if (restart) {
+            that.request('service_admin', {role: payload.role, status: 'restart'}, function (result) {
+              that.message(result);
+              if (view === that.view) that.show(page);
+            }, '配置已保存，正在重启');
+          } else {
+            that.message(res);
+            if (view === that.view) that.show(page);
+          }
+        }, '正在保存配置');
+      };
+      if (restart) bt.simple_confirm({title: '保存并重启', msg: '重启会中断现有连接，是否继续？'}, execute);
+      else execute();
+    },
+    file: function (role, view) {
+      var that = this;
+      this.request('get_config_file', {role: role}, function (res) {
+        if (view !== that.view) return;
+        if (!res.status) return that.message(res);
+        $('<p class="nps-tip nps-path">').text(res.path + '；Ctrl+S 保存，Ctrl+F 搜索。保存前执行基础格式校验，完整兼容性仍以服务启动日志为准。').appendTo(that.body);
+        $('<div id="bt-nps-config-editor" style="height:370px;"></div>').appendTo(that.body);
+        var editor = bt.aceEditor({el: 'bt-nps-config-editor', mode: 'ini', content: res.data, readOnly: false});
+        that.editor = editor;
+        var save = function (restart) {
+          that.save('set_config_file', {role: role, content: editor.ACE.getValue(), revision: res.revision}, restart, view, 'file');
+        };
+        editor.ACE.commands.addCommand({name: '保存NPS配置', bindKey: {win: 'Ctrl-S', mac: 'Command-S'}, exec: function () { save(false); }, readOnly: false});
+        that.saveButtons(that.body, save);
+        $('<p class="nps-tip">').text('上次配置备份为同目录的 .conf.bak；请勿修改插件专用 log_path。高级设置、证书和隧道语法请参考对应版本的上游配置。').appendTo(that.body);
+      }, '读取配置文件');
+    },
+    logs: function (role, view) {
+      var that = this;
+      this.request('get_logs', {role: role}, function (res) {
+        if (view !== that.view) return;
+        if (!res.status) return that.message(res);
+        $('<button class="btn btn-success btn-sm mb10">刷新日志</button>').appendTo(that.body).on('click', function () { that.show('logs'); });
+        var output = $('<pre class="nps-log">').text(res.data).appendTo(that.body);
+        output.scrollTop(output[0].scrollHeight);
+        $('<p class="nps-tip">').text('最多显示末尾 128 KB；日志可能含连接信息或 vkey，分享前请脱敏。').appendTo(that.body);
+      }, '读取服务日志');
+    }
+  };
+  nps.init();
+})();
+</script>

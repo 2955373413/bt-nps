@@ -1,0 +1,14 @@
+{
+    "repository": "ehang-io/nps",
+    "version": "v0.26.10",
+    "packages": {
+        "linux_amd64_server.tar.gz": {
+            "size": 5713067,
+            "sha256": "1d68ea2c7d6916f63ddfac248582985ba54afd069893d5ba03949411d8e2cc5b"
+        },
+        "linux_amd64_client.tar.gz": {
+            "size": 4649323,
+            "sha256": "be1676db7076cadb63ff68b5168f1f50f2f9ed714e1d4b945f937535baca34ea"
+        }
+    }
+}

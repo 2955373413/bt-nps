@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# 测试临时目录
+.nps-test-*/
+.nps-build-test-*/
+
+# 打包产物
+nps.zip
